@@ -1,38 +1,71 @@
-# Project Name
+# uprof L3 Miss Rate Extractor
 
-## Goal
+Extracts per-CCX L3 miss rates from an AMD uProf Zen4 CSV report, annotates each sample with a workload phase, and writes the results to a CSV file.
 
-<!-- Describe what this project does and why it exists. -->
+## Requirements
 
-## Principles
+- Python 3.6+
+- No third-party dependencies
 
-- Clarity over cleverness
-- Minimum viable implementation
-- Every decision traceable to a requirement
+## Input Files
 
-## Design & Architecture
+### uProf CSV (`uprof.csv`)
 
-<!-- High-level overview: key components, data flow, module boundaries. -->
+AMD uProf PCM report for a Zen4 processor (e.g. EPYC 9755). Must contain:
+- `Profile Time:` header — used as the absolute start time
+- `CPU Topology:` section — maps CPU IDs to CCX (CCD) IDs
+- `L3 METRICS` section — per-CCD `L3 Miss %` samples with relative timestamps
 
-## Key Technologies
+### Phase CSV (`phase.csv`)
 
-| Technology | Role |
-|------------|------|
-|            |      |
+Workload phase definitions with three columns:
 
-## Build
+| Column | Description |
+|---|---|
+| `op` | Phase name (e.g. `ReadFilter`, `PerformEmbedding`) |
+| `median_start_timestamp` | Phase start time in ISO 8601 format |
+| `end_timestamp` | Phase end time in ISO 8601 format |
 
-```bash
-# Install dependencies
-# Build steps
+Example:
+```
+op,median_start_timestamp,end_timestamp
+ReadFilter,2026-05-14T05:40:00.000,2026-05-14T05:40:45.228
+PerformEmbedding,2026-05-14T05:40:54.228,2026-05-14T05:48:21.840
 ```
 
-## Installation
+## Usage
 
-```bash
-# How to install / deploy
+```
+python3 getl3miss.py <uprof.csv> <phase.csv> <output.csv> <cpu_range> [cpu_range ...]
 ```
 
-## User Guide
+CPU ranges can be individual IDs or hyphen-separated ranges:
 
-<!-- How to use the project once it is running. -->
+```
+python3 getl3miss.py l2_zen4_2.csv phase.csv l3missrate.csv 28-39 121-123 5
+```
+
+## Output
+
+A CSV file with one row per uProf sample timestamp that falls within a known phase. Rows with no matching phase are dropped.
+
+| Column | Description |
+|---|---|
+| `timestamp` | Absolute ISO 8601 timestamp (profile start + relative offset) |
+| `l3_missrate` | Average L3 miss % across all CCX IDs derived from the input CPUs |
+| `stage_info` | Workload phase name from `phase.csv` |
+
+Example:
+```
+timestamp,l3_missrate,stage_info
+2026-05-14T05:40:45.199000,19.98,ReadFilter
+```
+
+## How It Works
+
+1. Parses the CPU topology section to map each CPU ID to its CCX (CCD) ID
+2. Deduplicates CCX IDs across all specified CPU ranges
+3. Converts each relative uProf timestamp to an absolute timestamp using the profile start time
+4. For each timestamp, averages the `L3 Miss %` values across all resolved CCX IDs
+5. Matches the absolute timestamp against phase windows and annotates accordingly
+6. Drops samples that fall outside all defined phases

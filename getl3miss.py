@@ -2,10 +2,7 @@ import sys
 import csv
 from datetime import datetime, timedelta
 
-CSV_PATH = "l2_zen4_2.csv"
-PHASE_PATH = "phase.csv"
 L3_MISS_RATE_OFFSET = 2  # within each CCX block: 0=L3 Access, 1=L3 Miss, 2=L3 Miss %
-ZEN_L3_MISS_PATH = "l3missrate.csv"
 
 
 def parse_cpu_args(args):
@@ -113,19 +110,22 @@ def parse_l3_miss_rates_avg(lines, ccx_ids, profile_time, phases):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <cpu_id|start-end> [...]")
-        print(f"  e.g. {sys.argv[0]} 28-39 121-123 5")
+    if len(sys.argv) < 5:
+        print(f"Usage: {sys.argv[0]} <uprof.csv> <phase.csv> <output.csv> <cpu_id|start-end> [...]")
+        print(f"  e.g. {sys.argv[0]} l2_zen4_2.csv phase.csv l3missrate.csv 28-39 121-123 5")
         sys.exit(1)
 
-    cpu_ids = parse_cpu_args(sys.argv[1:])
+    csv_path = sys.argv[1]
+    phase_path = sys.argv[2]
+    ZEN_L3_MISS_PATH = sys.argv[3]
+    cpu_ids = parse_cpu_args(sys.argv[4:])
 
-    with open(CSV_PATH) as f:
+    with open(csv_path) as f:
         lines = f.readlines()
 
     cpu_to_ccx = parse_topology(lines)
     profile_time = parse_profile_time(lines)
-    phases = parse_phases(PHASE_PATH)
+    phases = parse_phases(phase_path)
 
     missing = [c for c in cpu_ids if c not in cpu_to_ccx]
     if missing:
@@ -142,12 +142,13 @@ def main():
 
     ccx_ids_str = ";".join(str(c) for c in ccx_ids)
     rows = [
-        {"timestamp": abs_ts.isoformat(), "l3_missrate": round(avg, 4), "stage_info": phase, "ccx_ids": ccx_ids_str}
+        {"timestamp": abs_ts.isoformat(), "l3_missrate": round(avg, 4), "stage_info": phase}
         for abs_ts, avg, phase in rates
+        if phase != "-"
     ]
 
     with open(ZEN_L3_MISS_PATH, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=["timestamp", "l3_missrate", "stage_info", "ccx_ids"])
+        writer = csv.DictWriter(f, fieldnames=["timestamp", "l3_missrate", "stage_info"])
         writer.writeheader()
         writer.writerows(rows)
 
