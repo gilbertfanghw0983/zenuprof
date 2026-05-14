@@ -1,0 +1,4 @@
+staging/
+.DS_Store
+*.log
+*.tmp
